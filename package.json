@@ -1,7 +1,7 @@
 {
-  "name": "fixed-data-table-2-ta",
+  "name": "transient-fixed-data-table",
   "version": "0.8.12",
-  "description": "A React table component designed to allow presenting thousands of rows of data.",
+  "description": "A React table component designed to allow presenting thousands of rows of data. (forked)",
   "main": "main.js",
   "peerDependencies": {
     "react": ">=0.13.0 || ^0.14.0-beta3",
