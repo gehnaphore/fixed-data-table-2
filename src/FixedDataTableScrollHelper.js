@@ -269,6 +269,22 @@ class FixedDataTableScrollHelper {
   }
 
   /**
+   * Allows to scroll to selected row with specified offset. It always
+   * brings that row to top of viewport with that offset
+   */
+  scrollToRowWithDisposition(/*number*/ rowIndex, /*number*/ offset, /*string*/ disposition) /*object*/ {
+    rowIndex = clamp(rowIndex, 0, Math.max(this._rowCount - 1, 0));
+    var firstRow = this._rowOffsets.sumUntil(rowIndex);
+    offset = clamp(offset, 0, this._storedHeights[rowIndex]);
+    if (disposition === 'bottom') {
+      return this.scrollTo(firstRow + offset - this._viewportHeight);
+    } else if (disposition === 'middle') {
+      return this.scrollTo(firstRow + offset - Math.round(this._viewportHeight/2));
+    } // assume 'top
+    return this.scrollTo(firstRow + offset);
+  }
+
+  /**
    * Allows to scroll to selected row by bringing it to viewport with minimal
    * scrolling. This that if row is fully visible, scroll will not be changed.
    * If top border of row is above top of viewport it will be scrolled to be

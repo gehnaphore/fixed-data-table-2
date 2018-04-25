@@ -296,6 +296,21 @@ var FixedDataTable = createReactClass({
     scrollToRow: PropTypes.number,
 
     /**
+     * Desired position of row being scrolled to
+     */
+    scrollToRowDisposition: PropTypes.oneOf(['top','middle','bottom','shown']),
+
+    /**
+     * Pixel offset into the specified row to which we should scroll
+     */
+    scrollToRowOffset: PropTypes.number,
+
+    /**
+     * The duration (in millis) to take for the scroll.  If non-zero, simple easing will be used.
+     */
+    scrollToRowDuration: PropTypes.number,
+
+    /**
      * Callback that is called when scrolling starts with current horizontal
      * and vertical scroll values.
      */
@@ -1079,6 +1094,32 @@ var FixedDataTable = createReactClass({
     return columnInfo;
   },
 
+  // TODO: Work in progress
+  _smoothYScroll(/*number*/ y, /*number*/ duration) {
+    var smoothScrollYTarget = y;
+    var smoothScrollYStart = this.state.scrollY;
+    var smoothScrollYTime = performance.now();
+    var doSmoothScroll = ((time) => {
+      if (this._smoothYScrollFrameHandler !== doSmoothScroll) return;
+      var DURATION = 100;
+      var doneTime = smoothScrollYTime + duration;
+      var thisY = smoothScrollYTarget;
+      if (time < doneTime) {
+        var t = 1 - (doneTime - time) / duration;
+        t = t<.5 ? 4*t*t*t : (t-1)*(2*t-2)*(2*t-2)+1;
+        thisY = smoothScrollYStart + (smoothScrollYTarget - smoothScrollYStart) * t;
+      }
+      if (this.state.scrollY === thisY) {
+        this._smoothYScrollFrameHandler = undefined;
+      } else {
+        this._onVerticalScroll(thisY);
+        requestAnimationFrame(doSmoothScroll);
+      }
+    });
+    this._smoothYScrollFrameHandler = doSmoothScroll;
+    requestAnimationFrame(doSmoothScroll);
+  },
+
   _calculateState(/*object*/ props, /*?object*/ oldState) /*object*/ {
     invariant(
       props.height !== undefined || props.maxHeight !== undefined,
@@ -1166,12 +1207,35 @@ var FixedDataTable = createReactClass({
       adjustedWidth = adjustedWidth - Scrollbar.SIZE - 1;
     }
 
-    var lastScrollToRow  = oldState ? oldState.scrollToRow : undefined;
-    if (props.scrollToRow != null && (props.scrollToRow !== lastScrollToRow || viewportHeight !== oldViewportHeight)) {
-      scrollState = this._scrollHelper.scrollRowIntoView(props.scrollToRow);
-      firstRowIndex = scrollState.index;
-      firstRowOffset = scrollState.offset;
-      scrollY = scrollState.position;
+    var lastScrollToRow, lastScrollToRowDisposition, lastScrollToRowOffset;
+    if (oldState) {
+      lastScrollToRow = oldState.scrollToRow;
+      lastScrollToRowDisposition = oldState.scrollToRowDisposition;
+      lastScrollToRowOffset = oldState.scrollToRowOffset;
+    }
+    if (
+      props.scrollToRow != null &&
+      (
+        props.scrollToRow !== lastScrollToRow ||
+        props.scrollToRowDisposition !== lastScrollToRowDisposition ||
+        props.scrollToRowOffset !== lastScrollToRowOffset ||
+        viewportHeight !== oldViewportHeight
+      )
+    ) {
+      var disp = props.scrollToRowDisposition || 'shown';
+      if (disp === 'shown') {
+        scrollState = this._scrollHelper.scrollRowIntoView(props.scrollToRow);
+      } else {
+        scrollState = this._scrollHelper.scrollToRowWithDisposition(props.scrollToRow, props.scrollToRowOffset || 0, disp);
+      }
+
+      if (props.scrollToRowDuration && props.scrollToRowDuration > 5) {
+        this._smoothYScroll(scrollState.position, props.scrollToRowDuration);
+      } else {
+        firstRowIndex = scrollState.index;
+        firstRowOffset = scrollState.offset;
+        scrollY = scrollState.position;
+      }
     }
 
     var lastScrollTop = oldState ? oldState.scrollTop : undefined;

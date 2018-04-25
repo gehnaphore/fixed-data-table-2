@@ -1,5 +1,5 @@
 {
-  "name": "fixed-data-table-2",
+  "name": "fixed-data-table-2-ta",
   "version": "0.8.12",
   "description": "A React table component designed to allow presenting thousands of rows of data.",
   "main": "main.js",
