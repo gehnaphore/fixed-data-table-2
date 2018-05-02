@@ -472,7 +472,12 @@ var Scrollbar = createReactClass({
   },
 
   _blur() {
-    var el = ReactDOM.findDOMNode(this);
+    var el;
+    // TODO: Due to timing issue, the componenet is about to be unmounted but componentWillUnmount()
+    // has not yet been called. In production findDOMNode() will throw an exception. Ignore for now.
+    try {
+      el = ReactDOM.findDOMNode(this);
+    } catch (err) {}
     if (!el) {
       return;
     }
