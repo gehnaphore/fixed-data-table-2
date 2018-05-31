@@ -1966,7 +1966,12 @@ var Scrollbar = (0, _createReactClass2.default)({
     });
   },
   _blur: function _blur() {
-    var el = _ReactDOM2.default.findDOMNode(this);
+    var el;
+    // TODO: Due to timing issue, the componenet is about to be unmounted but componentWillUnmount()
+    // has not yet been called. In production findDOMNode() will throw an exception. Ignore for now.
+    try {
+      el = _ReactDOM2.default.findDOMNode(this);
+    } catch (err) {}
     if (!el) {
       return;
     }
@@ -3662,6 +3667,21 @@ var FixedDataTable = (0, _createReactClass2.default)({
     scrollToRow: _propTypes2.default.number,
 
     /**
+     * Desired position of row being scrolled to
+     */
+    scrollToRowDisposition: _propTypes2.default.oneOf(['top', 'middle', 'bottom', 'shown']),
+
+    /**
+     * Pixel offset into the specified row to which we should scroll
+     */
+    scrollToRowOffset: _propTypes2.default.number,
+
+    /**
+     * The duration (in millis) to take for the scroll.  If non-zero, simple easing will be used.
+     */
+    scrollToRowDuration: _propTypes2.default.number,
+
+    /**
      * Callback that is called when scrolling starts with current horizontal
      * and vertical scroll values.
      */
@@ -4336,6 +4356,35 @@ var FixedDataTable = (0, _createReactClass2.default)({
 
     return columnInfo;
   },
+
+
+  // TODO: Work in progress
+  _smoothYScroll: function _smoothYScroll( /*number*/y, /*number*/duration) {
+    var _this = this;
+
+    var smoothScrollYTarget = y;
+    var smoothScrollYStart = this.state.scrollY;
+    var smoothScrollYTime = performance.now();
+    var doSmoothScroll = function doSmoothScroll(time) {
+      if (_this._smoothYScrollFrameHandler !== doSmoothScroll) return;
+      var DURATION = 100;
+      var doneTime = smoothScrollYTime + duration;
+      var thisY = smoothScrollYTarget;
+      if (time < doneTime) {
+        var t = 1 - (doneTime - time) / duration;
+        t = t < .5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+        thisY = smoothScrollYStart + (smoothScrollYTarget - smoothScrollYStart) * t;
+      }
+      if (_this.state.scrollY === thisY) {
+        _this._smoothYScrollFrameHandler = undefined;
+      } else {
+        _this._onVerticalScroll(thisY);
+        requestAnimationFrame(doSmoothScroll);
+      }
+    };
+    this._smoothYScrollFrameHandler = doSmoothScroll;
+    requestAnimationFrame(doSmoothScroll);
+  },
   _calculateState: function _calculateState( /*object*/props, /*?object*/oldState) /*object*/{
     (0, _invariant2.default)(props.height !== undefined || props.maxHeight !== undefined, 'You must set either a height or a maxHeight');
 
@@ -4403,12 +4452,27 @@ var FixedDataTable = (0, _createReactClass2.default)({
       adjustedWidth = adjustedWidth - _Scrollbar2.default.SIZE - 1;
     }
 
-    var lastScrollToRow = oldState ? oldState.scrollToRow : undefined;
-    if (props.scrollToRow != null && (props.scrollToRow !== lastScrollToRow || viewportHeight !== oldViewportHeight)) {
-      scrollState = this._scrollHelper.scrollRowIntoView(props.scrollToRow);
-      firstRowIndex = scrollState.index;
-      firstRowOffset = scrollState.offset;
-      scrollY = scrollState.position;
+    var lastScrollToRow, lastScrollToRowDisposition, lastScrollToRowOffset;
+    if (oldState) {
+      lastScrollToRow = oldState.scrollToRow;
+      lastScrollToRowDisposition = oldState.scrollToRowDisposition;
+      lastScrollToRowOffset = oldState.scrollToRowOffset;
+    }
+    if (props.scrollToRow != null && (props.scrollToRow !== lastScrollToRow || props.scrollToRowDisposition !== lastScrollToRowDisposition || props.scrollToRowOffset !== lastScrollToRowOffset || viewportHeight !== oldViewportHeight)) {
+      var disp = props.scrollToRowDisposition || 'shown';
+      if (disp === 'shown') {
+        scrollState = this._scrollHelper.scrollRowIntoView(props.scrollToRow);
+      } else {
+        scrollState = this._scrollHelper.scrollToRowWithDisposition(props.scrollToRow, props.scrollToRowOffset || 0, disp);
+      }
+
+      if (props.scrollToRowDuration && props.scrollToRowDuration > 5) {
+        this._smoothYScroll(scrollState.position, props.scrollToRowDuration);
+      } else {
+        firstRowIndex = scrollState.index;
+        firstRowOffset = scrollState.offset;
+        scrollY = scrollState.position;
+      }
     }
 
     var lastScrollTop = oldState ? oldState.scrollTop : undefined;
@@ -9711,6 +9775,25 @@ var FixedDataTableScrollHelper = function () {
       offset = (0, _clamp2.default)(offset, -this._storedHeights[rowIndex], 0);
       var firstRow = this._rowOffsets.sumUntil(rowIndex);
       return this.scrollTo(firstRow - offset);
+    }
+
+    /**
+     * Allows to scroll to selected row with specified offset. It always
+     * brings that row to top of viewport with that offset
+     */
+
+  }, {
+    key: 'scrollToRowWithDisposition',
+    value: function scrollToRowWithDisposition( /*number*/rowIndex, /*number*/offset, /*string*/disposition) /*object*/{
+      rowIndex = (0, _clamp2.default)(rowIndex, 0, Math.max(this._rowCount - 1, 0));
+      var firstRow = this._rowOffsets.sumUntil(rowIndex);
+      offset = (0, _clamp2.default)(offset, 0, this._storedHeights[rowIndex]);
+      if (disposition === 'bottom') {
+        return this.scrollTo(firstRow + offset - this._viewportHeight);
+      } else if (disposition === 'middle') {
+        return this.scrollTo(firstRow + offset - Math.round(this._viewportHeight / 2));
+      } // assume 'top
+      return this.scrollTo(firstRow + offset);
     }
 
     /**
